@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      input.vertical {
+	    -webkit-appearance: slider-vertical;
+        border-radius: 5px;
+	    writing-mode: bt-lr;
+      }
+      
+     .switch {
+        position: relative;
+        display: inline-block;
+        width: 60px;
+        height: 34px;
+      }
+      
+      .switch input {display:none;}
+      
+      .slidercheckbox {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        -webkit-transition: .4s;
+        transition: .4s;
+      }
+      
+      .slidercheckbox:before {
+        position: absolute;
+        content: "";
+        height: 26px;
+        width: 26px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        -webkit-transition: .4s;
+        transition: .4s;
+      }
+      
+      input:checked + .slidercheckbox {
+        background-color: #2196F3;
+      }
+      
+      input:focus + .slidercheckbox {
+        box-shadow: 0 0 1px #2196F3;
+      }
+      
+      input:checked + .slidercheckbox:before {
+        -webkit-transform: translateX(26px);
+        -ms-transform: translateX(26px);
+        transform: translateX(26px);
+      }
+    </style>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" crossorigin="anonymous"></script>
+  </head>
+  <body>
+    <div class="row" id="microphonerow">
+      <div class="card" id="mic" style="width: 390px;">
+        <div class="card-body">
+          <h5 class="card-title">Microphone</h5>
+        </div>
+      </div>
+    </div>
+  
+    <div class="row" id="playlistrow">
+      <div class="card" id="playlist" style="width: 390px;">
+        <div class="card-body">
+          <h5 class="card-title">Playlist</h5>
+          <div class="list-group" id="songs">
+            <a href="#" class="list-group-item list-group-item-action" data-value="./resources/song1.mp3">Great song 1</a>
+            <a href="#" class="list-group-item list-group-item-action" data-value="./resources/song2.mp3">Great song 2</a>
+          </div>
+          <audio id="mp3player" controls="controls">
+            <source id="mp3playerSource" src="">
+          </audio>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" id="effectsrow">
+      <div class="card" id="effects" style="width: 390px;">
+        <div class="card-body">
+          <h5 class="card-title">Effects</h5>
+          <button type="button" class="btn btn-default btn-sm" id="meow" disabled>meow</button>
+          <button type="button" class="btn btn-default btn-sm" id="bouncy" disabled>bouncy</button>
+          <button type="button" class="btn btn-default btn-sm" id="badumtss" disabled>ba dum tss</button>
+        </div>
+      </div>
+    </div>
+
+  <script type="text/javascript" src="./buffer-loader.js"></script> 
+  <script type="text/javascript">
+    
+    $('#songs').on('click', function(e) {
+      e.preventDefault();
+      var elm = e.target;
+      var source = document.getElementById('mp3playerSource');
+      source.src = elm.getAttribute('data-value');
+      
+      var player = document.getElementById('mp3player');
+      player.load();
+      player.play();
+    })
+  
+      
+    var audioCtx;
+    
+    var bufferLoader;
+    var effectMeowBuffer;
+    var effectBouncyBuffer;
+    var effectBadumtssBuffer;
+    var gainNodeEffects;  // just for effects, so we have a single connection point
+    var microphoneInput;
+    
+    var endNodes = {};
+    
+    window.addEventListener("load", init, false);
+    function playEffect(effectBuffer) {
+      effectBufferSource = audioCtx.createBufferSource();
+      effectBufferSource.buffer = effectBuffer;
+      effectBufferSource.connect(gainNodeEffects);
+      effectBufferSource.start(0); 
+    }
+    
+    $('#meow').on('click', function(event) {
+      playEffect(effectMeowBuffer);
+    });
+    $('#bouncy').on('click', function(event) {
+      playEffect(effectBouncyBuffer);
+    });
+    $('#badumtss').on('click', function(event) {
+      playEffect(effectBadumtssBuffer);
+    });
+  
+    function init() {
+      try {
+        window.AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+      } catch(e) {
+        alert("Web Audio API is not supported in this browser");
+      }
+        
+      bufferLoader = new BufferLoader(
+        audioCtx,
+        [
+          "./resources/meow.mp3",
+          "./resources/bouncy.mp3",
+          "./resources/badumtss.mp3"
+        ],
+        finishedLoadingEffects
+      );
+        
+      bufferLoader.load();
+    }
+        
+    function createElementFromHtml(htmlString) {
+      var div = document.createElement('div');
+      div.innerHTML = htmlString.trim();
+      return div.firstChild; 
+    }
+    
+    function addVolumeControl(row) {
+      var volumeControl = 
+        "<div class='card' style='width: 130px;'>" +
+        "  <div class='card-body'>" +
+        "    <h5 class='card-title'>Volume</h5>" +
+        "    <div class='slider'>" +
+        "      <input id='volume' class='vertical' orient='vertical' type='range' step='1'" +
+        "        value='100' min='0' max='100' style='width: 90px;'>" +
+        "      <span id='valBox' style='padding-left: 35px;'>100</span>" +
+        "    </div> " +
+        "  </div>" +
+        "</div>";
+ 
+      var gainNode = audioCtx.createGain();
+      endNodes[row].connect(gainNode);
+      endNodes[row] = gainNode;
+    
+      var element = createElementFromHtml(volumeControl);
+      var slider = element.querySelector('#volume');
+      var valBox = element.querySelector('#valBox')
+      slider.addEventListener('input', function() {
+        valBox.innerHTML = this.value;
+        gainNode.gain.value = this.value / 100;
+      })
+              
+      $( '#' + row ).append(element);
+    }
+    
+    function addVuMeter(row) {
+      var volumeControl = 
+        "<div class='card' style='width: 130px;'>" +
+        "  <div class='card-body'>" +
+        "    <h5 class='card-title'>VU meter</h5>" +
+        "    <canvas id='meter' width='20' height='100' style='border: 1px solid black;margin-left: 35px'></canvas>" +
+        "  </div>" +
+        "</div>";
+      var node = audioCtx.createAnalyser();
+
+      endNodes[row].connect(node);
+      endNodes[row] = node;
+      
+      var dataArray = new Float32Array(node.fftSize); 
+    
+      var element = createElementFromHtml(volumeControl);
+      var canvas = element.querySelector("#meter")
+      var ctx2d = canvas.getContext("2d");
+      ctx2d.fillStyle = "#008000";
+      
+      $( '#' + row ).append(element);
+      
+      function renderChart() {
+        requestAnimationFrame(renderChart);
+        
+        var sum = 0.0;
+        node.getFloatTimeDomainData(dataArray);
+        for (let i = 0; i < dataArray.length; i++) {
+           sum += (dataArray[i] ** 2);
+        }
+        sum /= (dataArray.length);
+        sum = 10 * Math.log10(sum);
+        
+        // Lets map the from -60dB to 0dB
+        var y;
+        var mindb = -60;
+        if (sum < mindb) y = 100;
+        else {
+          y = 100 * sum  / mindb;
+        }
+        ctx2d.fillStyle = "white";
+        ctx2d.fillRect(0,0, canvas.width, canvas.height);      
+        ctx2d.fillStyle = "#008000";
+        ctx2d.fillRect(0, y ,20, 100 - y);
+      }
+
+      // Run the loop
+      renderChart();
+    }
+    
+    function addMuteControl(row) {
+      var control = 
+        "<div class='card' style='width: 130px;'>" +
+        "  <div class='card-body'>" +
+        "    <h5 class='card-title'>Mute</h5>" +
+        "      <label class='switch' style='left: 10px;'>" +
+        "        <input type='checkbox'>" +
+        "        <span class='slidercheckbox'></span>" +
+        "     </label>" +
+        "  </div>" +
+        "</div>";
+ 
+      var gainNode = audioCtx.createGain();
+      endNodes[row].connect(gainNode);
+      endNodes[row] = gainNode;
+    
+      var element = createElementFromHtml(control);
+      
+      var checkbox = element.querySelector('input');
+      checkbox.addEventListener( 'change', function() {
+        if(this.checked) {
+          gainNode.gain.value = 0;
+        } else {
+          gainNode.gain.value = 1;
+        }
+      });
+      
+      $( '#' + row ).append(element);
+    }
+    
+    async function finishedLoadingEffects(bufferList) {
+      console.log("finished loading");
+      
+      // Add effects
+      effectMeowBuffer = bufferList[0];
+      effectBouncyBuffer = bufferList[1];
+      effectBadumtssBuffer = bufferList[2];
+      
+      gainNodeEffects = audioCtx.createGain();
+      endNodes['effectsrow'] = gainNodeEffects;
+      
+      $( '#meow' ).prop('disabled', false);
+      $( '#bouncy' ).prop('disabled', false);
+      $( '#badumtss' ).prop('disabled', false);
+      
+      // Link playlist
+      var audioNode = document.querySelector("audio");
+      var source = audioCtx.createMediaElementSource(audioNode);
+      endNodes['playlistrow'] = source;
+      
+      // Add microphone source
+      const stream = navigator.mediaDevices.getUserMedia({audio: true});
+      stream.catch(err => console.error('Error getting media', err));
+      microphoneInput = audioCtx.createMediaStreamSource(await stream);
+      endNodes['microphonerow'] = microphoneInput;
+      
+      // Append controls
+      addVuMeter('microphonerow');
+      addMuteControl('microphonerow');
+      addVolumeControl('microphonerow');
+      addVuMeter('microphonerow');
+      
+      addVuMeter('playlistrow');
+      addMuteControl('playlistrow');
+      addVolumeControl('playlistrow');
+      addVuMeter('playlistrow');
+      
+      addVuMeter('effectsrow');
+      addMuteControl('effectsrow');
+      addVolumeControl('effectsrow');
+      addVuMeter('effectsrow');
+      
+      // Pipe final element of each row to audioCtx.destination
+      Object.keys(endNodes).forEach(function(e) {
+        endNodes[e].connect(audioCtx.destination);
+      });
+    }
+       
+  </script> 
+  </body>
+</html>
