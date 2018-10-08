@@ -62,11 +62,6 @@
   </head>
   <body>
     <div class="row" id="microphonerow">
-      <div class="card" id="mic" style="width: 390px;">
-        <div class="card-body">
-          <h5 class="card-title">Microphone</h5>
-        </div>
-      </div>
     </div>
   
     <div class="row" id="playlistrow">
@@ -85,12 +80,13 @@
     </div>
 
     <div class="row" id="effectsrow">
-      <div class="card" id="effects" style="width: 390px;">
+    </div>
+    
+    <div class="row" id="masterrow">
+      <div class="card" id="master" style="width: 390px;">
         <div class="card-body">
-          <h5 class="card-title">Effects</h5>
-          <button type="button" class="btn btn-default btn-sm" id="meow" disabled>meow</button>
-          <button type="button" class="btn btn-default btn-sm" id="bouncy" disabled>bouncy</button>
-          <button type="button" class="btn btn-default btn-sm" id="badumtss" disabled>ba dum tss</button>
+          <h5 class="card-title">Master track</h5>
+          
         </div>
       </div>
     </div>
@@ -112,34 +108,13 @@
       
     var audioCtx;
     
-    var bufferLoader;
-    var effectMeowBuffer;
-    var effectBouncyBuffer;
-    var effectBadumtssBuffer;
-    var gainNodeEffects;  // just for effects, so we have a single connection point
-    var microphoneInput;
+    var gainNodeMaster;  // just as input node;
     
     var endNodes = {};
     
     window.addEventListener("load", init, false);
-    function playEffect(effectBuffer) {
-      effectBufferSource = audioCtx.createBufferSource();
-      effectBufferSource.buffer = effectBuffer;
-      effectBufferSource.connect(gainNodeEffects);
-      effectBufferSource.start(0); 
-    }
-    
-    $('#meow').on('click', function(event) {
-      playEffect(effectMeowBuffer);
-    });
-    $('#bouncy').on('click', function(event) {
-      playEffect(effectBouncyBuffer);
-    });
-    $('#badumtss').on('click', function(event) {
-      playEffect(effectBadumtssBuffer);
-    });
-  
-    function init() {
+     
+    async function init() {
       try {
         window.AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
@@ -147,26 +122,129 @@
         alert("Web Audio API is not supported in this browser");
       }
         
-      bufferLoader = new BufferLoader(
-        audioCtx,
-        [
-          "./resources/meow.mp3",
-          "./resources/bouncy.mp3",
-          "./resources/badumtss.mp3"
-        ],
-        finishedLoadingEffects
-      );
-        
-      bufferLoader.load();
+      // Add effects
+      await addEffectsSource('effectsrow');
+            
+      // Link playlist
+      var audioNode = document.querySelector("audio");
+      var source = audioCtx.createMediaElementSource(audioNode);
+      endNodes['playlistrow'] = source;
+      
+      // Add microphone source
+      await addMicrophoneSource('microphonerow');
+      
+      // Append controls
+      addVuMeterNode('microphonerow');
+      addMuteControl('microphonerow');
+      addVolumeNode('microphonerow');
+      addVuMeterNode('microphonerow');
+      
+      addVuMeterNode('playlistrow');
+      addMuteControl('playlistrow');
+      addVolumeNode('playlistrow');
+      addVuMeterNode('playlistrow');
+      
+      addVuMeterNode('effectsrow');
+      addMuteControl('effectsrow');
+      addVolumeNode('effectsrow');
+      addVuMeterNode('effectsrow');
+      
+      gainNodeMaster = audioCtx.createGain();
+      // Pipe final element of each row to master
+      Object.keys(endNodes).forEach(function(e) {
+        endNodes[e].connect(gainNodeMaster);
+      });
+      
+      endNodes['masterrow'] = gainNodeMaster;
+      
+      addVuMeterNode('masterrow');
+      addMuteControl('masterrow');
+      addVolumeNode('masterrow');
+      addVuMeterNode('masterrow');
+      endNodes['masterrow'].connect(audioCtx.destination);
     }
-        
+      
     function createElementFromHtml(htmlString) {
       var div = document.createElement('div');
       div.innerHTML = htmlString.trim();
       return div.firstChild; 
     }
     
-    function addVolumeControl(row) {
+    async function addEffectsSource(row) {
+    
+      var effects = {};
+      effects['meow'] = {
+        resource: './resources/meow.mp3',
+        name: 'meow'
+      };
+      effects['bouncy'] = {
+        resource: './resources/bouncy.mp3',
+        name: 'bouncy'
+      };
+      effects['badumtss3'] = {
+        resource: './resources/badumtss.mp3',
+        name: 'ba dum tss'
+      };
+      
+      var bufferLoader = new BufferLoader(audioCtx);
+      
+      for (let key in effects) {
+        if (effects.hasOwnProperty(key)) {
+          effects[key].buffer = await bufferLoader.load(effects[key].resource);
+        }
+      }
+      
+      var gainNodeEffects = audioCtx.createGain();
+      endNodes[row] = gainNodeEffects;
+      
+      var effectsHtml =
+        "<div class='card' id='effects' style='width: 390px;'> " +
+        "  <div class='card-body'>" +
+        "    <h5 class='card-title'>Effects</h5>" +
+        "  </div>" +
+        "</div>"
+      
+      var element = createElementFromHtml(effectsHtml);
+      
+      // Add buttons
+      var divCardBody = element.querySelector('.card-body');
+      for (let key in effects) {
+        if (effects.hasOwnProperty(key)) {
+          $(divCardBody).append("<button type='button' class='btn btn-default btn-sm' id=" + key + ">" + effects[key].name + "</button>").append(" ");
+        }
+      }
+         
+      Object.keys(effects).forEach(function(e) {
+        var mybutton = element.querySelector('#' + e);
+        mybutton.addEventListener('click', function() {
+          effectBufferSource = audioCtx.createBufferSource();
+          effectBufferSource.buffer = effects[e].buffer;
+          effectBufferSource.connect(gainNodeEffects);
+          effectBufferSource.start(0); 
+         });
+      });
+       
+      $( '#' + row ).append(element);
+      
+    }
+    
+    async function addMicrophoneSource(row) {
+      var micHtml = 
+        "<div class='card' id='mic' style='width: 390px;'>" +
+        "  <div class='card-body'>" +
+        "    <h5 class='card-title'>Microphone</h5>" +
+        "  </div>" +
+        "</div>";
+       
+      var element = createElementFromHtml(micHtml);
+      $( '#' + row ).append(element);
+      
+      const stream = navigator.mediaDevices.getUserMedia({audio: true});
+      stream.catch(err => console.error('Error getting media', err));
+      endNodes[row] = audioCtx.createMediaStreamSource(await stream);
+    }
+    
+    function addVolumeNode(row) {
       var volumeControl = 
         "<div class='card' style='width: 130px;'>" +
         "  <div class='card-body'>" +
@@ -194,7 +272,7 @@
       $( '#' + row ).append(element);
     }
     
-    function addVuMeter(row) {
+    function addVuMeterNode(row) {
       var volumeControl = 
         "<div class='card' style='width: 130px;'>" +
         "  <div class='card-body'>" +
@@ -229,7 +307,7 @@
         
         // Lets map the from -60dB to 0dB
         var y;
-        var mindb = -60;
+        var mindb = -45;
         if (sum < mindb) y = 100;
         else {
           y = 100 * sum  / mindb;
@@ -273,55 +351,7 @@
       
       $( '#' + row ).append(element);
     }
-    
-    async function finishedLoadingEffects(bufferList) {
-      console.log("finished loading");
-      
-      // Add effects
-      effectMeowBuffer = bufferList[0];
-      effectBouncyBuffer = bufferList[1];
-      effectBadumtssBuffer = bufferList[2];
-      
-      gainNodeEffects = audioCtx.createGain();
-      endNodes['effectsrow'] = gainNodeEffects;
-      
-      $( '#meow' ).prop('disabled', false);
-      $( '#bouncy' ).prop('disabled', false);
-      $( '#badumtss' ).prop('disabled', false);
-      
-      // Link playlist
-      var audioNode = document.querySelector("audio");
-      var source = audioCtx.createMediaElementSource(audioNode);
-      endNodes['playlistrow'] = source;
-      
-      // Add microphone source
-      const stream = navigator.mediaDevices.getUserMedia({audio: true});
-      stream.catch(err => console.error('Error getting media', err));
-      microphoneInput = audioCtx.createMediaStreamSource(await stream);
-      endNodes['microphonerow'] = microphoneInput;
-      
-      // Append controls
-      addVuMeter('microphonerow');
-      addMuteControl('microphonerow');
-      addVolumeControl('microphonerow');
-      addVuMeter('microphonerow');
-      
-      addVuMeter('playlistrow');
-      addMuteControl('playlistrow');
-      addVolumeControl('playlistrow');
-      addVuMeter('playlistrow');
-      
-      addVuMeter('effectsrow');
-      addMuteControl('effectsrow');
-      addVolumeControl('effectsrow');
-      addVuMeter('effectsrow');
-      
-      // Pipe final element of each row to audioCtx.destination
-      Object.keys(endNodes).forEach(function(e) {
-        endNodes[e].connect(audioCtx.destination);
-      });
-    }
-       
+          
   </script> 
   </body>
 </html>
