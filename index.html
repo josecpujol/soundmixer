@@ -63,52 +63,19 @@
   <body>
     <div class="row" id="microphonerow">
     </div>
-  
+ 
     <div class="row" id="playlistrow">
-      <div class="card" id="playlist" style="width: 390px;">
-        <div class="card-body">
-          <h5 class="card-title">Playlist</h5>
-          <div class="list-group" id="songs">
-            <a href="#" class="list-group-item list-group-item-action" data-value="./resources/song1.mp3">Great song 1</a>
-            <a href="#" class="list-group-item list-group-item-action" data-value="./resources/song2.mp3">Great song 2</a>
-          </div>
-          <audio id="mp3player" controls="controls">
-            <source id="mp3playerSource" src="">
-          </audio>
-        </div>
-      </div>
     </div>
-
     <div class="row" id="effectsrow">
     </div>
-    
     <div class="row" id="masterrow">
-      <div class="card" id="master" style="width: 390px;">
-        <div class="card-body">
-          <h5 class="card-title">Master track</h5>
-        </div>
-      </div>
     </div>
 
   <script type="text/javascript" src="./buffer-loader.js"></script> 
   <script type="text/javascript">
     
-    $('#songs').on('click', function(e) {
-      e.preventDefault();
-      var elm = e.target;
-      var source = document.getElementById('mp3playerSource');
-      source.src = elm.getAttribute('data-value');
-      
-      var player = document.getElementById('mp3player');
-      player.load();
-      player.play();
-    })
-  
-      
+    
     var audioCtx;
-    
-    var gainNodeMaster;  // just as input node;
-    
     var endNodes = {};
     
     window.addEventListener("load", init, false);
@@ -121,45 +88,33 @@
         alert("Web Audio API is not supported in this browser");
       }
         
-      // Add effects
-      await addEffectsSource('effectsrow');
-            
-      // Link playlist
-      var audioNode = document.querySelector("audio");
-      var source = audioCtx.createMediaElementSource(audioNode);
-      endNodes['playlistrow'] = source;
-      
-      // Add microphone source
+      // Add child tracks
       await addMicrophoneSource('microphonerow');
-      
-      // Append controls
       addVuMeterNode('microphonerow');
       addMuteControl('microphonerow');
       addVolumeNode('microphonerow');
       addVuMeterNode('microphonerow');
       
+      addPlaylistSource('playlistrow');
       addVuMeterNode('playlistrow');
       addMuteControl('playlistrow');
       addVolumeNode('playlistrow');
       addVuMeterNode('playlistrow');
       
+      await addEffectsSource('effectsrow');
       addVuMeterNode('effectsrow');
       addMuteControl('effectsrow');
       addVolumeNode('effectsrow');
       addVuMeterNode('effectsrow');
       
-      gainNodeMaster = audioCtx.createGain();
-      // Pipe final element of each row to master
-      Object.keys(endNodes).forEach(function(e) {
-        endNodes[e].connect(gainNodeMaster);
-      });
-      
-      endNodes['masterrow'] = gainNodeMaster;
-      
+      // Add master after all children have been added
+      addMasterSource('masterrow');
       addVuMeterNode('masterrow');
       addMuteControl('masterrow');
       addVolumeNode('masterrow');
       addVuMeterNode('masterrow');
+            
+      // Connect master to destination
       endNodes['masterrow'].connect(audioCtx.destination);
     }
       
@@ -169,8 +124,74 @@
       return div.firstChild; 
     }
     
-    async function addEffectsSource(row) {
+    function addMasterSource(row) {
+      var masterHtml =
+        "<div class='card' id='master' style='width: 390px;'> " +
+        "  <div class='card-body'> " +
+        "    <h5 class='card-title'>Master track</h5> " +
+        "  </div> " +
+        "</div>";
+      var element = createElementFromHtml(masterHtml);
+      var divCardBody = element.querySelector('.card-body');
+      var childTracks = '<p>';
+      Object.keys(endNodes).forEach(function(e) {
+        childTracks += e;
+        childTracks = childTracks.substring(0, childTracks.length - 3);  // Hack: we remove "row". We assume it is there
+        childTracks += '<br>';
+      });
+      childTracks += '</p>';
+      
+      $(divCardBody).append(childTracks).append(" ");
+      gainNodeMaster = audioCtx.createGain();
+      // Pipe final element of each row to master
+      Object.keys(endNodes).forEach(function(e) {
+        endNodes[e].connect(gainNodeMaster);
+      });
+      
+      endNodes[row] = gainNodeMaster;
+      
+      $( '#' + row ).append(element);
+    }
     
+    
+    function addPlaylistSource(row) {
+      var audioHtml =
+      "<div class='card' id='playlist' style='width: 390px;'> " +
+      "  <div class='card-body'> " +
+      "    <h5 class='card-title'>Playlist</h5> " +
+      "    <div class='list-group' id='songs'> " +
+      "      <a href='#' class='list-group-item list-group-item-action' data-value='./resources/song1.mp3'>Great song 1</a> " +
+      "      <a href='#' class='list-group-item list-group-item-action' data-value='./resources/song2.mp3'>Great song 2</a> " +
+      "    </div> " +
+      "    <audio id='mp3player' controls='controls'> " +
+      "      <source id='mp3playerSource' src=''> " +
+      "    </audio> " +
+      "  </div> " +
+      "</div>";
+      
+      var element = createElementFromHtml(audioHtml);
+      
+      var songs = element.querySelector('#songs')
+      songs.addEventListener('click', function(e) {
+        e.preventDefault();
+        var elm = e.target;
+        var source = document.getElementById('mp3playerSource');
+        source.src = elm.getAttribute('data-value');
+        
+        var player = document.getElementById('mp3player');
+        player.load();
+        player.play();
+      });
+    
+      var audioNode = element.querySelector("audio");
+      var source = audioCtx.createMediaElementSource(audioNode);
+      endNodes[row] = source;
+      
+      $( '#' + row ).append(element);
+    }
+    
+    
+    async function addEffectsSource(row) {
       var effects = {};
       effects['meow'] = {
         resource: './resources/meow.mp3',
@@ -224,9 +245,9 @@
       });
        
       $( '#' + row ).append(element);
-      
     }
-    
+ 
+ 
     async function addMicrophoneSource(row) {
       var micHtml = 
         "<div class='card' id='mic' style='width: 390px;'>" +
@@ -242,6 +263,7 @@
       stream.catch(err => console.error('Error getting media', err));
       endNodes[row] = audioCtx.createMediaStreamSource(await stream);
     }
+    
     
     function addVolumeNode(row) {
       var volumeControl = 
@@ -270,6 +292,7 @@
               
       $( '#' + row ).append(element);
     }
+    
     
     function addVuMeterNode(row) {
       var volumeControl = 
@@ -321,6 +344,7 @@
       renderChart();
     }
     
+    
     function addMuteControl(row) {
       var control = 
         "<div class='card' style='width: 130px;'>" +
@@ -350,7 +374,8 @@
       
       $( '#' + row ).append(element);
     }
-          
+    
+    
   </script> 
   </body>
 </html>
